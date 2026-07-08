@@ -14,29 +14,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// successBody is the envelope for successful responses.
-type successBody struct {
+// SuccessBody is the envelope for successful responses.
+type SuccessBody struct {
 	Success bool `json:"success"`
 	Data    any  `json:"data"`
 }
 
-// errorDetail carries a machine-readable code alongside a human message.
-type errorDetail struct {
+// ErrorDetail carries a machine-readable code alongside a human message.
+type ErrorDetail struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// errorBody is the envelope for error responses.
-type errorBody struct {
+// ErrorBody is the envelope for error responses.
+type ErrorBody struct {
 	Success bool        `json:"success"`
-	Error   errorDetail `json:"error"`
+	Error   ErrorDetail `json:"error"`
 }
 
 // Success writes a standardised success JSON response.
 //
 //	response.Success(c, http.StatusOK, gin.H{"message": "ok"})
 func Success(c *gin.Context, statusCode int, data any) {
-	c.JSON(statusCode, successBody{
+	c.JSON(statusCode, SuccessBody{
 		Success: true,
 		Data:    data,
 	})
@@ -46,9 +46,9 @@ func Success(c *gin.Context, statusCode int, data any) {
 //
 //	response.Error(c, http.StatusUnauthorized, "TOKEN_INVALID", "Token is invalid or expired")
 func Error(c *gin.Context, statusCode int, code, message string) {
-	c.AbortWithStatusJSON(statusCode, errorBody{
+	c.AbortWithStatusJSON(statusCode, ErrorBody{
 		Success: false,
-		Error: errorDetail{
+		Error: ErrorDetail{
 			Code:    code,
 			Message: message,
 		},

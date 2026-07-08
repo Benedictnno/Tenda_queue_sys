@@ -1,0 +1,324 @@
+basePath: /api/v1
+definitions:
+  auth.DeviceVerifyResponse:
+    properties:
+      device_id:
+        type: string
+      location:
+        type: string
+      valid:
+        type: boolean
+    type: object
+  auth.LoginRequest:
+    properties:
+      device_info:
+        type: string
+      identifier:
+        type: string
+      password:
+        type: string
+      role:
+        type: string
+    required:
+    - identifier
+    - password
+    - role
+    type: object
+  auth.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        description: seconds
+        type: integer
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/auth.UserInfo'
+    type: object
+  auth.RefreshRequest:
+    properties:
+      refresh_token:
+        example: eyJhbG...
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RefreshResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+    type: object
+  auth.UserInfo:
+    properties:
+      department:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      identifier:
+        type: string
+      role:
+        type: string
+    type: object
+  auth.VerifyDeviceRequest:
+    properties:
+      device_id:
+        example: SCANNER-01
+        type: string
+      device_key:
+        example: raw-key-here
+        type: string
+    required:
+    - device_id
+    - device_key
+    type: object
+  auth.VerifyRequest:
+    properties:
+      token:
+        example: eyJhbG...
+        type: string
+    required:
+    - token
+    type: object
+  auth.VerifyResponse:
+    properties:
+      user:
+        $ref: '#/definitions/auth.UserInfo'
+      valid:
+        type: boolean
+    type: object
+  auth.docsLoginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.LoginResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  auth.docsLogoutResponse:
+    properties:
+      data:
+        properties:
+          message:
+            example: Logged out successfully
+            type: string
+        type: object
+      success:
+        example: true
+        type: boolean
+    type: object
+  auth.docsRefreshResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.RefreshResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  auth.docsVerifyDeviceResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.DeviceVerifyResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  auth.docsVerifyResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.VerifyResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  response.ErrorBody:
+    properties:
+      error:
+        $ref: '#/definitions/response.ErrorDetail'
+      success:
+        type: boolean
+    type: object
+  response.ErrorDetail:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Authentication system for the Tennda SaaS platform.
+  title: Tennda Auth API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user using identifier and password, returning access
+        and refresh tokens.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.docsLoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Login a user
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Revokes all refresh tokens for the authenticated user. Requires
+        Bearer token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.docsLogoutResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Logout user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a valid refresh token for a new access token.
+      parameters:
+      - description: Refresh Token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.docsRefreshResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/verify:
+    post:
+      consumes:
+      - application/json
+      description: Validates an access token and returns the embedded user claims.
+        For internal service use only.
+      parameters:
+      - description: Access Token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.VerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.docsVerifyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Verify access token (Internal)
+      tags:
+      - auth
+  /auth/verify-device:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a hardware QR scanner by its device ID and key. For
+        internal network use only.
+      parameters:
+      - description: Device Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.VerifyDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.docsVerifyDeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Verify hardware scanner (Internal)
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

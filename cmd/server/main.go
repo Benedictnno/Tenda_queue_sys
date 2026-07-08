@@ -2,6 +2,17 @@
 //
 // Entry point for the Tennda auth service.
 // Wires together config → database → repository → service → handler → router.
+//
+// @title Tennda Auth API
+// @version 1.0
+// @description Authentication system for the Tennda SaaS platform.
+// @host localhost:8080
+// @BasePath /api/v1
+//
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 package main
 
 import (
@@ -23,6 +34,10 @@ import (
 	"github.com/tennda/auth/config"
 	"github.com/tennda/auth/internal/auth"
 	"github.com/tennda/auth/internal/database"
+
+	_ "github.com/tennda/auth/docs" // swagger docs
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -60,6 +75,9 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "tennda-auth"})
 	})
+
+	// Swagger UI
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// ── 6. Route groups ────────────────────────────────────────────────────
 	v1 := router.Group("/api/v1")
