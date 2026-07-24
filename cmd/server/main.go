@@ -1,11 +1,11 @@
 // Package main — cmd/server/main.go
 //
-// Entry point for the Tennda auth service.
+// Entry point for the Tennda queue management service.
 // Wires together config → database → repository → service → handler → router.
 //
-// @title Tennda Auth API
+// @title Tennda Queue API
 // @version 1.0
-// @description Authentication system for the Tennda SaaS platform.
+// @description Authentication and queue management system for the Tennda SaaS platform.
 // @host localhost:8080
 // @BasePath /api/v1
 //
@@ -34,6 +34,7 @@ import (
 	"github.com/tennda/auth/config"
 	"github.com/tennda/auth/internal/auth"
 	"github.com/tennda/auth/internal/database"
+	"github.com/tennda/auth/internal/queue"
 
 	_ "github.com/tennda/auth/docs" // swagger docs
 	swaggerFiles "github.com/swaggo/files"
@@ -52,9 +53,15 @@ func main() {
 	defer db.Close()
 
 	// ── 3. Wire dependencies ───────────────────────────────────────────────
-	repo := auth.NewRepository(db)
-	svc := auth.NewService(repo, cfg)
-	h := auth.NewHandler(svc)
+	// Auth domain
+	authRepo := auth.NewRepository(db)
+	authSvc := auth.NewService(authRepo, cfg)
+	authHandler := auth.NewHandler(authSvc)
+
+	// Queue domain
+	queueRepo := queue.NewRepository(db)
+	queueSvc := queue.NewService(queueRepo)
+	queueHandler := queue.NewHandler(queueSvc)
 
 	// ── 4. Rate limiter — 5 requests per IP per minute on /login ──────────
 	rate := limiter.Rate{
@@ -84,14 +91,21 @@ func main() {
 	authGroup := v1.Group("/auth")
 	{
 		// Public endpoints — no JWT required.
-		authGroup.POST("/login", loginLimiter, h.HandleLogin)
-		authGroup.POST("/refresh", h.HandleRefresh)
+		authGroup.POST("/register", loginLimiter, authHandler.HandleRegister)
+		authGroup.POST("/login", loginLimiter, authHandler.HandleLogin)
+		authGroup.POST("/refresh", authHandler.HandleRefresh)
 
-		// Protected endpoint — JWT required.
+		// Protected endpoints — JWT required.
 		authGroup.POST(
 			"/logout",
 			auth.JWTMiddleware(cfg),
-			h.HandleLogout,
+			authHandler.HandleLogout,
+		)
+		authGroup.POST(
+			"/admin/register",
+			auth.JWTMiddleware(cfg),
+			auth.RoleGuard("admin", "super_admin"),
+			authHandler.HandleAdminRegister,
 		)
 
 		// ── Internal-only endpoints ──────────────────────────────────────
@@ -103,19 +117,34 @@ func main() {
 		//
 		// The Python FastAPI attendance service calls /auth/verify on every
 		// inbound request — no rate limit is applied here intentionally.
-		authGroup.POST("/verify", h.HandleVerify)
-		authGroup.POST("/verify-device", h.HandleVerifyDevice)
+		authGroup.POST("/verify", authHandler.HandleVerify)
+		authGroup.POST("/verify-device", authHandler.HandleVerifyDevice)
 	}
 
-	// ── 7. Example of RoleGuard usage (for reference) ─────────────────────
-	//
-	// When other services extend this router, protect routes like this:
-	//
-	//   v1.POST("/sessions",
-	//       auth.JWTMiddleware(cfg),
-	//       auth.RoleGuard("lecturer", "admin"),
-	//       sessionHandler.Create,
-	//   )
+	// ── 7. Queue routes ──────────────────────────────────────────────────
+	queueGroup := v1.Group("/queues")
+	queueGroup.Use(auth.JWTMiddleware(cfg)) // all queue routes require JWT
+	{
+		// Queue CRUD — creating queues restricted to staff/lecturers/admins.
+		queueGroup.POST("",
+			auth.RoleGuard("staff", "lecturer", "admin", "super_admin"),
+			queueHandler.HandleCreateQueue,
+		)
+		queueGroup.GET("", queueHandler.HandleListQueues)
+		queueGroup.GET("/:id", queueHandler.HandleGetQueue)
+
+		// User actions on a queue.
+		queueGroup.POST("/:id/join", queueHandler.HandleJoinQueue)
+		queueGroup.POST("/:id/leave", queueHandler.HandleLeaveQueue)
+		queueGroup.GET("/:id/position", queueHandler.HandleGetPosition)
+
+		// Queue owner / admin actions.
+		queueGroup.POST("/:id/serve-next", queueHandler.HandleServeNext)
+		queueGroup.POST("/:id/close", queueHandler.HandleCloseQueue)
+		queueGroup.POST("/:id/pause", queueHandler.HandlePauseQueue)
+		queueGroup.POST("/:id/resume", queueHandler.HandleResumeQueue)
+		queueGroup.GET("/:id/entries", queueHandler.HandleListEntries)
+	}
 
 	// ── 8. Start server with graceful shutdown ─────────────────────────────
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
@@ -129,7 +158,7 @@ func main() {
 
 	// Start in a goroutine so we can listen for shutdown signals.
 	go func() {
-		log.Printf("main: Tennda auth service listening on %s", addr)
+		log.Printf("main: Tennda service listening on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("main: ListenAndServe: %v", err)
 		}
@@ -150,5 +179,5 @@ func main() {
 		log.Fatalf("main: forced shutdown: %v", err)
 	}
 
-	log.Println("main: Tennda auth service stopped cleanly")
+	log.Println("main: Tennda service stopped cleanly")
 }

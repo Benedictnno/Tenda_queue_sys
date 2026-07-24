@@ -43,8 +43,8 @@ func Connect(databaseURL string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// MigrationSQL contains the DDL to create the three tables required by the
-// auth service.  Run this once against your database before starting the
+// MigrationSQL contains the DDL to create the tables required by the
+// Tennda service.  Run this once against your database before starting the
 // service.  In production, use a proper migration tool (goose, atlas, etc.)
 // instead of executing this directly.
 const MigrationSQL = `
@@ -87,4 +87,34 @@ CREATE TABLE IF NOT EXISTS device_keys (
     status    VARCHAR(20)  DEFAULT 'active',  -- active | revoked
     created_at TIMESTAMP   DEFAULT NOW()
 );
+
+-- ─── queues ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS queues (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title         VARCHAR(150) NOT NULL,
+    description   TEXT,
+    owner_id      UUID REFERENCES users(id) ON DELETE CASCADE,
+    department    VARCHAR(100),
+    location      VARCHAR(150),
+    max_size      INT DEFAULT 0,               -- daily capacity (0 = unlimited)
+    max_rejoins   INT DEFAULT 3,               -- max times a user can rejoin this queue per day
+    status        VARCHAR(20) DEFAULT 'open',  -- open | closed | paused
+    created_at    TIMESTAMP DEFAULT NOW(),
+    updated_at    TIMESTAMP DEFAULT NOW()
+);
+
+-- ─── queue_entries ───────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS queue_entries (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    queue_id    UUID REFERENCES queues(id) ON DELETE CASCADE,
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    position    INT NOT NULL,
+    status      VARCHAR(20) DEFAULT 'waiting',  -- waiting | serving | served | left
+    joined_at   TIMESTAMP DEFAULT NOW(),
+    served_at   TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_queue_entries_queue_status
+    ON queue_entries(queue_id, status, position);
+CREATE INDEX IF NOT EXISTS idx_queue_entries_queue_user
+    ON queue_entries(queue_id, user_id);
 `

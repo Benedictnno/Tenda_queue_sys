@@ -36,6 +36,11 @@ type docsLoginResponse struct {
 	Data    LoginResponse `json:"data"`
 }
 
+type docsRegisterResponse struct {
+	Success bool     `json:"success" example:"true"`
+	Data    UserInfo `json:"data"`
+}
+
 type docsRefreshResponse struct {
 	Success bool            `json:"success" example:"true"`
 	Data    RefreshResponse `json:"data"`
@@ -69,6 +74,77 @@ type VerifyRequest struct {
 type VerifyDeviceRequest struct {
 	DeviceID  string `json:"device_id"  binding:"required" example:"SCANNER-01"`
 	DeviceKey string `json:"device_key" binding:"required" example:"raw-key-here"`
+}
+
+// ─── POST /api/v1/auth/register ───────────────────────────────────────────────
+
+// HandleRegister handles public self-registration of standard users.
+//
+// @Summary Register a new user
+// @Description Registers a new user account with default role "user". Self-registering as admin or super_admin is forbidden.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body RegisterRequest true "Registration details"
+// @Success 201 {object} docsRegisterResponse
+// @Failure 400 {object} response.ErrorBody
+// @Failure 403 {object} response.ErrorBody
+// @Failure 409 {object} response.ErrorBody
+// @Router /auth/register [post]
+func (h *Handler) HandleRegister(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+
+	userInfo, err := h.svc.Register(c.Request.Context(), req, "", true)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+
+	response.Success(c, http.StatusCreated, userInfo)
+}
+
+// ─── POST /api/v1/auth/admin/register ─────────────────────────────────────────
+
+// HandleAdminRegister handles protected user registration by administrators.
+//
+// @Summary Register user (Admin)
+// @Description Allows admins/super_admins to register new user accounts with assigned roles.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body RegisterRequest true "Registration details"
+// @Success 201 {object} docsRegisterResponse
+// @Failure 400 {object} response.ErrorBody
+// @Failure 401 {object} response.ErrorBody
+// @Failure 403 {object} response.ErrorBody
+// @Failure 409 {object} response.ErrorBody
+// @Router /auth/admin/register [post]
+func (h *Handler) HandleAdminRegister(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+
+	var callerRole string
+	if raw, exists := c.Get(contextKeyClaims); exists {
+		if claims, ok := raw.(*Claims); ok {
+			callerRole = claims.Role
+		}
+	}
+
+	userInfo, err := h.svc.Register(c.Request.Context(), req, callerRole, false)
+	if err != nil {
+		handleServiceError(c, err)
+		return
+	}
+
+	response.Success(c, http.StatusCreated, userInfo)
 }
 
 // ─── POST /api/v1/auth/login ──────────────────────────────────────────────────

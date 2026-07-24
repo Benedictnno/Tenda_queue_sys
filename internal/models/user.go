@@ -9,19 +9,23 @@ import (
 // ─── Role constants ───────────────────────────────────────────────────────────
 
 const (
-	RoleStudent  = "student"
-	RoleStaff    = "staff"
-	RoleLecturer = "lecturer"
-	RoleAdmin    = "admin"
+	RoleSuperAdmin = "super_admin"
+	RoleAdmin      = "admin"
+	RoleUser       = "user"
+	RoleStudent    = "student"
+	RoleStaff      = "staff"
+	RoleLecturer   = "lecturer"
 )
 
 // ValidRoles is the exhaustive set of allowed user roles.  Any value outside
 // this set must be rejected at the API boundary.
 var ValidRoles = map[string]bool{
-	RoleStudent:  true,
-	RoleStaff:    true,
-	RoleLecturer: true,
-	RoleAdmin:    true,
+	RoleSuperAdmin: true,
+	RoleAdmin:      true,
+	RoleUser:       true,
+	RoleStudent:    true,
+	RoleStaff:      true,
+	RoleLecturer:   true,
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────

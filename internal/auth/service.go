@@ -6,6 +6,7 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,9 +15,19 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/tennda/auth/config"
+	"github.com/tennda/auth/internal/models"
 )
 
 // ─── Request / Response DTOs ─────────────────────────────────────────────────
+
+// RegisterRequest is the decoded body of POST /auth/register and POST /auth/admin/register.
+type RegisterRequest struct {
+	Identifier string `json:"identifier" binding:"required"`
+	Password   string `json:"password"   binding:"required,min=6"`
+	FullName   string `json:"full_name"  binding:"required"`
+	Role       string `json:"role"`
+	Department string `json:"department"`
+}
 
 // LoginRequest is the decoded body of POST /auth/login.
 type LoginRequest struct {
@@ -280,6 +291,104 @@ func (s *Service) VerifyDevice(ctx context.Context, deviceID, rawKey string) (*D
 		DeviceID: dk.DeviceID,
 		Location: dk.Location,
 	}, nil
+}
+
+// Register creates a new user record.
+//
+// If isPublic is true (POST /auth/register):
+// - Default role is "user" if not specified.
+// - Self-registration as "admin" or "super_admin" is forbidden.
+//
+// If isPublic is false (POST /auth/admin/register):
+// - Default role is "user" if not specified.
+// - super_admin caller can create any valid role.
+// - admin caller can create user, student, staff, lecturer (cannot create admin or super_admin).
+func (s *Service) Register(ctx context.Context, req RegisterRequest, callerRole string, isPublic bool) (*UserInfo, error) {
+	targetRole := req.Role
+	if targetRole == "" {
+		targetRole = models.RoleUser
+	}
+
+	// 1. Validate role is known.
+	if !models.ValidRoles[targetRole] {
+		return nil, serviceErr(http.StatusBadRequest, "INVALID_ROLE",
+			fmt.Sprintf("Role '%s' is invalid", targetRole))
+	}
+
+	// 2. Permission checks.
+	if isPublic {
+		if targetRole == models.RoleAdmin || targetRole == models.RoleSuperAdmin {
+			return nil, serviceErr(http.StatusForbidden, "FORBIDDEN_ROLE",
+				"Cannot self-register with administrative privileges")
+		}
+	} else {
+		switch callerRole {
+		case models.RoleSuperAdmin:
+			// Super admin can assign any valid role.
+		case models.RoleAdmin:
+			if targetRole == models.RoleSuperAdmin || targetRole == models.RoleAdmin {
+				return nil, serviceErr(http.StatusForbidden, "FORBIDDEN_ROLE",
+					"Admins cannot assign admin or super_admin roles")
+			}
+		default:
+			return nil, serviceErr(http.StatusForbidden, "FORBIDDEN",
+				"Insufficient permissions to register users")
+		}
+	}
+
+	// 3. Hash password.
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("service: Register: hash password: %w", err)
+	}
+
+	// 4. Generate user ID.
+	userID, err := generateUUID()
+	if err != nil {
+		return nil, fmt.Errorf("service: Register: generate uuid: %w", err)
+	}
+
+	now := time.Now()
+	user := &models.User{
+		ID:           userID,
+		Identifier:   req.Identifier,
+		PasswordHash: string(hashedPassword),
+		FullName:     req.FullName,
+		Role:         targetRole,
+		Department:   req.Department,
+		Status:       "active",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	// 5. Persist to DB.
+	if err := s.repo.CreateUser(ctx, user); err != nil {
+		if errors.Is(err, ErrUserExists) {
+			return nil, serviceErr(http.StatusConflict, "USER_EXISTS",
+				"A user with this identifier already exists")
+		}
+		return nil, fmt.Errorf("service: Register: %w", err)
+	}
+
+	return &UserInfo{
+		ID:         user.ID,
+		Identifier: user.Identifier,
+		FullName:   user.FullName,
+		Role:       user.Role,
+		Department: user.Department,
+	}, nil
+}
+
+// generateUUID returns a cryptographically secure RFC 4122 v4 UUID string.
+func generateUUID() (string, error) {
+	var uuid [16]byte
+	_, err := rand.Read(uuid[:])
+	if err != nil {
+		return "", err
+	}
+	uuid[6] = (uuid[6] & 0x0f) | 0x40
+	uuid[8] = (uuid[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
 
 

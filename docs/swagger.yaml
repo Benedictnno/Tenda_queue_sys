@@ -51,6 +51,24 @@ definitions:
       expires_in:
         type: integer
     type: object
+  auth.RegisterRequest:
+    properties:
+      department:
+        type: string
+      full_name:
+        type: string
+      identifier:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      role:
+        type: string
+    required:
+    - full_name
+    - identifier
+    - password
+    type: object
   auth.UserInfo:
     properties:
       department:
@@ -119,6 +137,14 @@ definitions:
         example: true
         type: boolean
     type: object
+  auth.docsRegisterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.UserInfo'
+      success:
+        example: true
+        type: boolean
+    type: object
   auth.docsVerifyDeviceResponse:
     properties:
       data:
@@ -131,6 +157,152 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/auth.VerifyResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  queue.CreateQueueRequest:
+    properties:
+      department:
+        type: string
+      description:
+        type: string
+      location:
+        type: string
+      max_rejoins:
+        description: max rejoins per user per day; 0 = use default (3)
+        type: integer
+      max_size:
+        description: daily capacity; 0 = unlimited
+        type: integer
+      title:
+        type: string
+    required:
+    - title
+    type: object
+  queue.EntryResponse:
+    properties:
+      id:
+        type: string
+      joined_at:
+        type: string
+      position:
+        type: integer
+      queue_id:
+        type: string
+      served_at:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: string
+    type: object
+  queue.PositionResponse:
+    properties:
+      people_ahead:
+        type: integer
+      position:
+        type: integer
+      queue_id:
+        type: string
+      status:
+        type: string
+    type: object
+  queue.QueueListResponse:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      queues:
+        items:
+          $ref: '#/definitions/queue.QueueResponse'
+        type: array
+      total:
+        type: integer
+    type: object
+  queue.QueueResponse:
+    properties:
+      created_at:
+        type: string
+      department:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      location:
+        type: string
+      max_rejoins:
+        type: integer
+      max_size:
+        type: integer
+      owner_id:
+        type: string
+      served_today:
+        type: integer
+      status:
+        type: string
+      title:
+        type: string
+      waiting_count:
+        type: integer
+    type: object
+  queue.ServeNextResponse:
+    properties:
+      message:
+        type: string
+      now_serving:
+        $ref: '#/definitions/queue.EntryResponse'
+      previously_serving:
+        $ref: '#/definitions/queue.EntryResponse'
+    type: object
+  queue.docsEntriesListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/queue.EntryResponse'
+        type: array
+      success:
+        example: true
+        type: boolean
+    type: object
+  queue.docsEntryResponse:
+    properties:
+      data:
+        $ref: '#/definitions/queue.EntryResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  queue.docsPositionResponse:
+    properties:
+      data:
+        $ref: '#/definitions/queue.PositionResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  queue.docsQueueListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/queue.QueueListResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  queue.docsQueueResponse:
+    properties:
+      data:
+        $ref: '#/definitions/queue.QueueResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+  queue.docsServeNextResponse:
+    properties:
+      data:
+        $ref: '#/definitions/queue.ServeNextResponse'
       success:
         example: true
         type: boolean
@@ -149,13 +321,60 @@ definitions:
       message:
         type: string
     type: object
+  response.SuccessBody:
+    properties:
+      data: {}
+      success:
+        type: boolean
+    type: object
 host: localhost:8080
 info:
   contact: {}
-  description: Authentication system for the Tennda SaaS platform.
-  title: Tennda Auth API
+  description: Authentication and queue management system for the Tennda SaaS platform.
+  title: Tennda Queue API
   version: "1.0"
 paths:
+  /auth/admin/register:
+    post:
+      consumes:
+      - application/json
+      description: Allows admins/super_admins to register new user accounts with assigned
+        roles.
+      parameters:
+      - description: Registration details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.docsRegisterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Register user (Admin)
+      tags:
+      - auth
   /auth/login:
     post:
       consumes:
@@ -249,6 +468,41 @@ paths:
       summary: Refresh access token
       tags:
       - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Registers a new user account with default role "user". Self-registering
+        as admin or super_admin is forbidden.
+      parameters:
+      - description: Registration details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.docsRegisterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Register a new user
+      tags:
+      - auth
   /auth/verify:
     post:
       consumes:
@@ -315,6 +569,370 @@ paths:
       summary: Verify hardware scanner (Internal)
       tags:
       - auth
+  /queues:
+    get:
+      description: Returns a paginated list of queues, optionally filtered by status.
+      parameters:
+      - description: Filter by status (open, closed, paused)
+        in: query
+        name: status
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, max 50)
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/queue.docsQueueListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List queues
+      tags:
+      - queues
+    post:
+      consumes:
+      - application/json
+      description: Creates a new queue owned by the authenticated user.
+      parameters:
+      - description: Queue details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/queue.CreateQueueRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/queue.docsQueueResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create a queue
+      tags:
+      - queues
+  /queues/{id}:
+    get:
+      description: Returns queue details including waiting count and daily served
+        count.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/queue.docsQueueResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get queue details
+      tags:
+      - queues
+  /queues/{id}/close:
+    post:
+      description: Closes the queue, marking all waiting entries as left. Only the
+        queue owner or admins can call this.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Close a queue
+      tags:
+      - queues
+  /queues/{id}/entries:
+    get:
+      description: Returns all entries for a queue, optionally filtered by status.
+        Only the queue owner or admins can view entries.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Filter by entry status (waiting, serving, served, left)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/queue.docsEntriesListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List queue entries
+      tags:
+      - queues
+  /queues/{id}/join:
+    post:
+      description: Adds the authenticated user to the specified queue. Users can rejoin
+        after leaving/being served, up to the queue's rejoin limit.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/queue.docsEntryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Join a queue
+      tags:
+      - queues
+  /queues/{id}/leave:
+    post:
+      description: Allows the authenticated user to voluntarily leave the queue.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Leave a queue
+      tags:
+      - queues
+  /queues/{id}/pause:
+    post:
+      description: Pauses the queue so no new users can join. Existing entries remain.
+        Only the queue owner or admins can call this.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Pause a queue
+      tags:
+      - queues
+  /queues/{id}/position:
+    get:
+      description: Returns the authenticated user's position and number of people
+        ahead.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/queue.docsPositionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get queue position
+      tags:
+      - queues
+  /queues/{id}/resume:
+    post:
+      description: Resumes a paused queue, allowing new users to join again. Only
+        the queue owner or admins can call this.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Resume a queue
+      tags:
+      - queues
+  /queues/{id}/serve-next:
+    post:
+      description: Marks the currently serving person as served and promotes the next
+        waiting person. Only the queue owner or admins can call this.
+      parameters:
+      - description: Queue UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/queue.docsServeNextResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Serve next person
+      tags:
+      - queues
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

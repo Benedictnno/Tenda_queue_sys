@@ -12,12 +12,16 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tennda/auth/internal/models"
 )
 
 // ErrNotFound is returned when a requested record does not exist.
 var ErrNotFound = errors.New("record not found")
+
+// ErrUserExists is returned when a user with the same identifier already exists.
+var ErrUserExists = errors.New("user already exists")
 
 // Repository handles all database interactions for the auth domain.
 type Repository struct {
@@ -27,6 +31,28 @@ type Repository struct {
 // NewRepository creates a Repository backed by the given connection pool.
 func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
+}
+
+// CreateUser inserts a new user record into the database.
+func (r *Repository) CreateUser(ctx context.Context, u *models.User) error {
+	const q = `
+		INSERT INTO users (id, identifier, password_hash, full_name, role, department, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err := r.db.Exec(ctx, q,
+		u.ID, u.Identifier, u.PasswordHash, u.FullName,
+		u.Role, u.Department, u.Status, u.CreatedAt, u.UpdatedAt,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrUserExists
+		}
+		return fmt.Errorf("repository: CreateUser: %w", err)
+	}
+
+	return nil
 }
 
 // ─── User queries ─────────────────────────────────────────────────────────────
